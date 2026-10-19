@@ -642,7 +642,7 @@ fn _link_or_copy(src: &Path, dst: &Path) -> Result<()> {
         };
         symlink(src, dst)
     } else {
-        if cfg!(target_os = "macos") {
+        if cfg!(target_os = "macos") && src.extension() != Some(OsStr::new("rlib")) {
             // There seems to be a race condition with APFS when hard-linking
             // binaries. Gatekeeper does not have signing or hash information
             // stored in kernel when running the process. Therefore killing it.
@@ -893,6 +893,41 @@ mod tests {
     use super::normalize_path;
     use super::write;
     use super::write_atomic;
+
+    #[test]
+    fn link_rlib_reuses_and_restores_output() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("libfoo-hash.rlib");
+        let dst = dir.path().join("libfoo.rlib");
+        write(&src, b"first").unwrap();
+
+        super::link_or_copy(&src, &dst).unwrap();
+        assert!(same_file::is_same_file(&src, &dst).unwrap());
+        super::link_or_copy(&src, &dst).unwrap();
+        assert!(same_file::is_same_file(&src, &dst).unwrap());
+
+        std::fs::remove_file(&dst).unwrap();
+        super::link_or_copy(&src, &dst).unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"first");
+
+        std::fs::remove_file(&src).unwrap();
+        write(&src, b"second").unwrap();
+        super::link_or_copy(&src, &dst).unwrap();
+        assert_eq!(std::fs::read(&dst).unwrap(), b"second");
+        assert!(same_file::is_same_file(&src, &dst).unwrap());
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn link_executable_still_copies_on_macos() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("foo-hash");
+        let dst = dir.path().join("foo");
+        write(&src, b"executable").unwrap();
+        super::link_or_copy(&src, &dst).unwrap();
+        assert!(!same_file::is_same_file(&src, &dst).unwrap());
+        assert_eq!(std::fs::read(&dst).unwrap(), b"executable");
+    }
 
     #[test]
     fn test_normalize_path() {

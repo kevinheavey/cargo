@@ -2069,6 +2069,51 @@ fn many_crate_types_correct() {
 }
 
 #[cargo_test]
+fn uplift_rlib_restores_cached_feature_variant_and_missing_output() {
+    let p = project()
+        .file(
+            "Cargo.toml",
+            r#"
+                [package]
+                name = "foo"
+                version = "0.1.0"
+                edition = "2021"
+
+                [features]
+                alternate = []
+            "#,
+        )
+        .file(
+            "src/lib.rs",
+            "pub const ALTERNATE: bool = cfg!(feature = \"alternate\");",
+        )
+        .build();
+    let output = p.target_debug_dir().join("libfoo.rlib");
+
+    p.cargo("build --lib").run();
+    let original = fs::read(&output).unwrap();
+    p.cargo("build --lib --features alternate").run();
+    assert_ne!(fs::read(&output).unwrap(), original);
+
+    p.cargo("build --lib")
+        .with_stderr_data(str![[r#"
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+
+"#]])
+        .run();
+    assert_eq!(fs::read(&output).unwrap(), original);
+
+    fs::remove_file(&output).unwrap();
+    p.cargo("build --lib")
+        .with_stderr_data(str![[r#"
+[FINISHED] `dev` profile [unoptimized + debuginfo] target(s) in [ELAPSED]s
+
+"#]])
+        .run();
+    assert_eq!(fs::read(&output).unwrap(), original);
+}
+
+#[cargo_test]
 fn set_both_dylib_and_cdylib_crate_types() {
     let p = project()
         .file(
