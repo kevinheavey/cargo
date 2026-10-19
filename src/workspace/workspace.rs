@@ -1976,6 +1976,10 @@ impl WorkspaceRootConfig {
             .iter()
             .any(|ex| manifest_path.starts_with(self.root_dir.join(ex)));
 
+        if !excluded {
+            return false;
+        }
+
         let explicit_member = match self.members {
             Some(ref members) => members
                 .iter()
@@ -1983,7 +1987,7 @@ impl WorkspaceRootConfig {
             None => false,
         };
 
-        !explicit_member && excluded
+        !explicit_member
     }
 
     /// Checks if the path is explicitly listed as a workspace member.
